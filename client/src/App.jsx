@@ -2,12 +2,11 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import { Provider } from 'react-redux';
 import store from './redux/store';
 import './App.css';
-import Hello from './components/Hello';
+import Test from './components/Test';
 import Login from './components/Login';
 import Home from './components/Home';
 import Register from './components/Register';
-import Search from './components/Search';
-import Modify from './components/Modify';
+import Modify from './components/Edit';
 import Header from './components/Header';
 
 function App() {
@@ -17,10 +16,9 @@ function App() {
         <ConditionalHeader />
         <Routes>
           <Route path="/" element={<Login />} />
-          <Route path="/test" element={<Hello />} />
+          <Route path="/test" element={<Test />} />
           <Route path="/home" element={<Home />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/search" element={<Search />} />
           <Route path="/modify" element={<Modify />} />
         </Routes>
       </Router>

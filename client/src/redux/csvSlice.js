@@ -1,39 +1,11 @@
-// src/redux/csvSlice.js
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
-
-export const uploadCsvData = createAsyncThunk(
-  'csv/uploadCsvData',
-  async (csvData, { getState }) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('User not authenticated');
-    }
-
-    const csvHeader = 'Employee ID,First Name,Last Name,Date of Birth,Date of Joining,Grade\n';
-    const csvRows = csvData.map(row => 
-      `${row.employeeId},${row.firstName},${row.lastName},${row.dateOfBirth},${row.dateOfJoining},${row.grade}`
-    );
-    const csvString = csvHeader + csvRows.join('\n');
-
-    const response = await axios.post('http://localhost:8000/addcsvfile', {
-      token: token,
-      csvString: csvString
-    });
-
-    if (response.status === 200) {
-      return csvData; // Optionally return additional data if needed
-    }
-    
-    throw new Error('Error uploading CSV file');
-  }
-);
+import { createSlice } from '@reduxjs/toolkit';
 
 const csvSlice = createSlice({
   name: 'csv',
   initialState: {
     data: [],
-    username: '', // Initialize username in the state
+    filename: '',
+    username: '', 
     loading: false,
     error: null
   },
@@ -41,25 +13,21 @@ const csvSlice = createSlice({
     setCsvData: (state, action) => {
       state.data = action.payload;
     },
-    setUsername: (state, action) => { // Define a new action for setting the username
-      state.username = action.payload;
+    setFilename: (state, action) => {
+      state.filename = action.payload;
     },
+    setUsername: (state, action) => {
+      state.username = action.payload;
+      localStorage.setItem('username', action.payload);
+    },
+    updateData: (state, action) => {
+      const index = state.data.findIndex(item => item.id === action.payload.id); // Assuming each row has a unique 'id'
+      if (index !== -1) {
+        state.data[index] = action.payload; // Update the row data
+      }
+    },    
   },
-  extraReducers: (builder) => {
-    builder
-      .addCase(uploadCsvData.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(uploadCsvData.fulfilled, (state, action) => {
-        state.loading = false;
-        state.data = action.payload;
-      })
-      .addCase(uploadCsvData.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.error.message;
-      });
-  }
 });
 
-export const { setCsvData, setUsername } = csvSlice.actions; // Export setUsername
+export const { setCsvData, setFilename, setUsername, updateData } = csvSlice.actions;
 export default csvSlice.reducer;

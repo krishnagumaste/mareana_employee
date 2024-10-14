@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException # type: ignore
+from fastapi import FastAPI, HTTPException, status # type: ignore
 from fastapi import Request # type: ignore
 import pandas as pd# type: ignore
 from fastapi import UploadFile, File# type: ignore
@@ -8,6 +8,13 @@ from motor.motor_asyncio import AsyncIOMotorClient # type: ignore
 from bson import ObjectId # type: ignore
 import jwt # type: ignore
 import logging
+from passlib.context import CryptContext # type: ignore
+from dotenv import load_dotenv # type: ignore
+import os
+
+load_dotenv()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 secret_key = 'krishna_gumaste'
 
@@ -23,7 +30,7 @@ app.add_middleware(
 )
 
 
-uri = "your-mongo-uri-here"
+uri = os.getenv("MONGO_URI")
 import certifi # type: ignore
 
 try:
@@ -77,20 +84,23 @@ async def test(req: Request):
 @app.post('/register')
 async def register(req: Request):
     data = await req.json()
-
-    # Define the users collection here
+    
+    # Define the users collection
     users_collection = database.users
 
     # Check if a user with the given email already exists
     existing_user = await users_collection.find_one({"email": data['email']})
     if existing_user:
-        raise HTTPException(status_code=409, detail="User already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
-    # If user does not exist, proceed with registration
+    # Hash the password before storing it
+    hashed_password = pwd_context.hash(data['password'])
+    
+    # Create the new user document with the hashed password
     new_user = {
         "name": data['name'],
         "email": data['email'],
-        "password": data['password']
+        "password": hashed_password
     }
     
     result = await users_collection.insert_one(new_user)
@@ -104,14 +114,19 @@ async def register(req: Request):
 @app.post('/login')
 async def login(req: Request):
     data = await req.json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and password are required")
 
     # Access the users collection
     users_collection = database.users
-    
-    # Find a user with matching email and password
-    user = await users_collection.find_one({"email": data['email'], "password": data['password']})
-    
-    if user:
+
+    # Find a user with a matching email
+    user = await users_collection.find_one({"email": email})
+
+    if user and pwd_context.verify(password, user.get('password')):
         # Generate a JWT token for the user using their user_id
         token = jwt.encode({'user_id': str(user['_id'])}, secret_key, algorithm='HS256')
         return {
@@ -119,10 +134,8 @@ async def login(req: Request):
             'token': token,
             'name': user.get('name')
         }
-    
-    return {
-        'message': 'Invalid User'
-    }
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
 # @app.get("/test")
 # async def test():
@@ -139,14 +152,13 @@ class CsvDataRequest(BaseModel):
     fileContent: str  # The CSV file content as a string
     token: str        # JWT token
 
-@app.post("/addcsvfile")
+@app.post("/addcsvdata")
 async def add_csv_file(req: Request):
     try:
         data = await req.json()
         # Decode the JWT token to get the user_id
         decoded_token = jwt.decode(data['token'], secret_key, algorithms=['HS256'])
         user_id = decoded_token.get('user_id')
-        print(user_id)
 
         # Check if the user_id is present
         if not user_id:
@@ -155,8 +167,8 @@ async def add_csv_file(req: Request):
         # Prepare the document to be stored in MongoDB with the CSV string
         csv_data = {
             "user_id": user_id,
-            "filename": "uploaded_data.csv",
-            "data": data['csvString']  # Store the CSV string directly
+            "filename": data['filename'],
+            "data": data['csvData']  # Store the CSV string directly
         }
 
         # Define the csv collection
@@ -176,8 +188,6 @@ async def add_csv_file(req: Request):
         return {
             'message': f'CSV file {action} successfully',
             'csv_id': str(result.upserted_id) if result.upserted_id else None,
-            'data': csv_data['data'],
-            'filename': "uploaded_data.csv"
         }
     except Exception as e:
         print("Error:", e)
@@ -211,7 +221,7 @@ async def get_user_data(req: Request):
         return {
             'message': 'User data retrieved successfully',
             'data': user_csv['data'],  # Return the user CSV data
-            'filename': user_csv.get('filename', 'User Data')  # Return the filename if available
+            'filename': user_csv['filename']  # Return the filename if available
         }
 
     except Exception as e:
